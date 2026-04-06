@@ -1,6 +1,10 @@
 # 🌍 Hybrid Atmospheric Intelligence Platform
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://hybrid-aqi-platform-gx6tuakjbdbcfqk3b9bjff.streamlit.app/)
+![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
+![XGBoost](https://img.shields.io/badge/XGBoost-172434?style=flat&logo=xgboost&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-150458?style=flat&logo=pandas&logoColor=white)
+![Scikit-Learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat&logo=scikit-learn&logoColor=white)
 
 **Live Demo:** [Click here to view the live dashboard](https://hybrid-aqi-platform-gx6tuakjbdbcfqk3b9bjff.streamlit.app/)
 
