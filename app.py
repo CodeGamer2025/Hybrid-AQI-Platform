@@ -8,18 +8,29 @@ import folium
 from streamlit_folium import st_folium
 
 # =================================================================
-# 1. PAGE SETUP & PROFESSIONAL CSS
+# 1. PAGE SETUP & PROFESSIONAL CSS (DARK MODE FIX)
 # =================================================================
-st.set_page_config(page_title="Live AQI Platform", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="Hybrid AQI Platform", page_icon="🌍", layout="wide")
 
 st.markdown("""
     <style>
-    .main { background-color: #fdfdfd; }
-    .stMetric { 
-        background-color: #ffffff; padding: 25px; border-radius: 15px; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f0f2f6;
+    /* Force Light Background and Contrast */
+    .main { background-color: #fdfdfd !important; }
+    
+    /* Style Metrics for perfect visibility in Dark Mode */
+    [data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        padding: 20px !important;
+        border-radius: 15px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+        border: 1px solid #f0f2f6 !important;
     }
-    /* ORANGE/RED BUTTON FROM SCREENSHOT */
+    
+    /* Force Text Colors to be Visible */
+    [data-testid="stMetricLabel"] > div { color: #555555 !important; font-weight: bold !important; }
+    [data-testid="stMetricValue"] > div { color: #111111 !important; }
+
+    /* Red Button Styling */
     div.stButton > button:first-child {
         background-color: #FF4B4B !important;
         color: white !important;
@@ -28,6 +39,7 @@ st.markdown("""
         height: 3em !important;
         padding: 0 30px !important;
         font-weight: bold !important;
+        width: 100%;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -50,11 +62,9 @@ CITY_COORDS = {
 
 def get_live_data(city):
     try:
-        # Weather
         w_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
         w_res = requests.get(w_url).json()
         t, h, w = w_res['main']['temp'], w_res['main']['humidity'], w_res['wind']['speed']*3.6
-        # Hardware Sensor
         s_url = f"https://api.waqi.info/feed/{city}/?token={WAQI_API_KEY}"
         s_res = requests.get(s_url).json()
         real_aqi = s_res['data']['aqi'] if s_res['status'] == 'ok' else None
@@ -64,27 +74,25 @@ def get_live_data(city):
     except: return 30, 50, 10, None, "N/A", "N/A"
 
 # =================================================================
-# 3. MAIN UI
+# 3. MAIN UI & LOGIC
 # =================================================================
-st.title("🌍 Hybrid AQI Platform")
+st.title("🌍 Hybrid Atmospheric Intelligence Platform")
 st.write("Validating **Machine Learning Predictions** against **Real-Time Hardware Sensors**.")
 st.divider()
 
 if 'active' not in st.session_state: st.session_state.active = False
 
-city_input = st.selectbox("Select your city to analyze real-time air quality:", list(CITY_COORDS.keys()))
+city_input = st.selectbox("Select city to analyze real-time air quality:", list(CITY_COORDS.keys()))
 
 if st.button("Initialize Hybrid Scan"):
-    t, h, w, real, p25, p10 = get_data = get_live_data(city_input)
+    t, h, w, real, p25, p10 = get_live_data(city_input)
     model = load_model()
     
-    # Heuristics
     hr = datetime.now().hour
     traffic = 8.5 if (8<=hr<=10 or 17<=hr<=20) else 4.0
-    industry = 80.0 if city_input in ["Vapi", "Delhi", "Ankleshwar"] else 35.0
+    industry = 80.0 if city_input in ["Vapi", "Delhi"] else 35.0
     stagnation = industry / (w + 0.1)
     
-    # Prediction
     feats = pd.DataFrame([[t, h, w, traffic, industry, stagnation]], 
                          columns=['temperature', 'humidity', 'wind_speed', 'traffic_density', 'industrial_activity', 'stagnation_index'])
     pred = model.predict(feats)[0]
@@ -93,66 +101,50 @@ if st.button("Initialize Hybrid Scan"):
     st.session_state.active = True
 
 # =================================================================
-# 4. DASHBOARD RENDERING (MATCHING SCREENSHOTS)
+# 4. DASHBOARD RENDERING
 # =================================================================
 if st.session_state.active:
     res = st.session_state.results
-    
     st.subheader("⚖️ System Validation (Model vs. Reality)")
     c1, c2, c3 = st.columns(3)
     
     with c1:
         st.info("### Software (XGBoost)\nCalculated via meteorological estimation.")
         st.metric("Predicted AQI", f"{res['pred']:.0f}")
-        
     with c2:
         st.success("### Hardware (WAQI)\nPulled from physical city sensors.")
         if res['real']:
             diff = abs(res['real'] - res['pred'])
             st.metric("Ground Truth AQI", f"{res['real']}", delta=f"{diff:.0f} point variance", delta_color="inverse")
-        else:
-            st.metric("Ground Truth AQI", "Offline")
-            
+        else: st.metric("Ground Truth AQI", "Offline")
     with c3:
         st.warning("### Pollutant Breakdown\nPhysical Particulate Matter.")
-        st.write(f"**PM 2.5:** {res['p25']} µg/m³")
-        st.write(f"**PM 10:** {res['p10']} µg/m³")
+        st.write(f"**PM 2.5:** {res['p25']} µg/m³ | **PM 10:** {res['p10']} µg/m³")
 
     st.divider()
-    
-    # SECTION 2: MAP & FORECAST
     st.subheader("📊 Geospatial & Temporal Analysis")
     l_col, r_col = st.columns(2)
     
     with l_col:
         st.markdown("**Live Geospatial Heatmap**")
         m = folium.Map(location=CITY_COORDS[res['city']], zoom_start=11, tiles="CartoDB positron")
-        folium.CircleMarker(CITY_COORDS[res['city']], radius=40, color="#FF8C00", fill=True, 
-                            tooltip=f"{res['city']} AQI: {res['real'] if res['real'] else res['pred']}").add_to(m)
+        folium.CircleMarker(CITY_COORDS[res['city']], radius=40, color="#FF8C00", fill=True).add_to(m)
         st_folium(m, width=600, height=350, key=f"map_{res['city']}")
-        
     with r_col:
         st.markdown("**Simulated 24-Hour Forecast**")
         chart_data = pd.DataFrame(res['pred'] + np.sin(np.linspace(0, 2*np.pi, 24))*15, columns=['AQI'])
         st.line_chart(chart_data, color="#FF4B4B")
 
     st.divider()
-    
-    # SECTION 3: IMPACT
     st.subheader("🚨 Real-World Impact")
     status = "Unhealthy" if res['pred'] > 150 else "Moderate"
-    st.error(f"### Predicted AQI: {res['pred']:.0f} ({status})")
-    
     cigs = res['pred'] / 22
-    st.info(f"🚬 **Breathing this air today is equivalent to smoking {cigs:.1f} cigarettes.**")
+    st.error(f"### Predicted AQI: {res['pred']:.0f} ({status})")
+    st.info(f"🚬 **Exposure is equivalent to smoking {cigs:.1f} cigarettes today.**")
     
-    st.subheader("📋 Actionable Advice for Today")
-    t1, t2, t3 = st.tabs(["🏃 For Athletes", "👶 For Parents", "🚗 For Commuters"])
-    with t1: st.write("**Verdict:** Move it indoors. Heavy breathing increases intake by 10x.")
-    with t2: st.write("**Verdict:** Keep children inside during peak industrial hours.")
-    with t3: st.write("**Verdict:** Normal commute, but keep windows closed in industrial zones.")
+    t1, t2 = st.tabs(["🏃 Activity Advice", "🏠 General Safety"])
+    with t1: st.write("Move high-intensity workouts indoors. Heavy breathing increases pollutant intake significantly.")
+    with t2: st.write("Keep windows closed during peak industrial hours. Use air purifiers if available in the area.")
 
-    st.divider()
-    st.subheader("💡 Why is this happening?")
-    if res['stagnation'] > 5:
-        st.markdown(f"The **Stagnation Index** in {res['city']} is currently very high. This means industrial emissions are not being blown away by the wind. Consider using public transit today.")
+st.markdown("---")
+st.caption("Hybrid Atmospheric Intelligence Platform | Research Node")
