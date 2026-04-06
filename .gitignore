@@ -1,0 +1,10 @@
+# Environments
+venv/
+env/
+__pycache__/
+
+# Streamlit Secrets (NEVER UPLOAD THIS)
+.streamlit/secrets.toml
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
