@@ -3,153 +3,156 @@ import pandas as pd
 import numpy as np
 import joblib
 import requests
+from datetime import datetime
 import folium
 from streamlit_folium import st_folium
 
 # =================================================================
-# 1. ARCHITECTURAL SETUP & UI STYLING
+# 1. PAGE SETUP & PROFESSIONAL CSS
 # =================================================================
-st.set_page_config(page_title="Hybrid AQI Platform", page_icon="🌍", layout="wide")
+st.set_page_config(page_title="Live AQI Platform", page_icon="🌍", layout="wide")
 
-# Custom CSS to force high-contrast visibility regardless of System Theme
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa !important; }
-    
-    /* Metric Card Styling */
-    [data-testid="stMetric"] {
-        background-color: #ffffff !important;
-        padding: 20px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05) !important;
-        border: 1px solid #dee2e6 !important;
+    .main { background-color: #fdfdfd; }
+    .stMetric { 
+        background-color: #ffffff; padding: 25px; border-radius: 15px; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #f0f2f6;
     }
-    
-    /* Forced Text Colors for Dark Mode Compatibility */
-    [data-testid="stMetricLabel"] > div { color: #495057 !important; font-weight: 600 !important; }
-    [data-testid="stMetricValue"] > div { color: #212529 !important; }
-    
-    /* Action Button Styling */
+    /* ORANGE/RED BUTTON FROM SCREENSHOT */
     div.stButton > button:first-child {
-        background-color: #e63946 !important;
+        background-color: #FF4B4B !important;
         color: white !important;
-        border-radius: 10px !important;
-        padding: 0.6rem 2rem !important;
-        font-weight: bold;
-        width: 100%;
-        border: none;
+        border-radius: 8px !important;
+        border: none !important;
+        height: 3em !important;
+        padding: 0 30px !important;
+        font-weight: bold !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # =================================================================
-# 2. DATA ACQUISITION & MODEL INFERENCE
+# 2. CORE FUNCTIONS & MODELS
 # =================================================================
 @st.cache_resource
-def load_prediction_model():
-    """Loads the serialized XGBoost regressor model."""
+def load_model():
     return joblib.load('models/xgboost_aqi_model.pkl')
 
-def fetch_environmental_data(city_name):
-    """Retrieves live meteorological and sensor data from OpenWeather and WAQI APIs."""
+WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
+WAQI_API_KEY = st.secrets["WAQI_API_KEY"]
+
+CITY_COORDS = {
+    "Vapi": [20.3893, 72.9106], "Gandhinagar": [23.2156, 72.6369],
+    "Ahmedabad": [23.0225, 72.5714], "Surat": [21.1702, 72.8311],
+    "Vadodara": [22.3072, 73.1812], "Delhi": [28.7041, 77.1025]
+}
+
+def get_live_data(city):
     try:
-        # Fetching keys securely from Streamlit Vault
-        owm_key = st.secrets["WEATHER_API_KEY"]
-        waqi_key = st.secrets["WAQI_API_KEY"]
-        
-        # API Endpoints
-        weather_url = f"http://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={owm_key}&units=metric"
-        aqi_url = f"https://api.waqi.info/feed/{city_name}/?token={waqi_key}"
-        
-        w_data = requests.get(weather_url).json()
-        a_data = requests.get(aqi_url).json()
-        
-        return {
-            'temp': w_data['main']['temp'],
-            'humidity': w_data['main']['humidity'],
-            'wind_speed': w_data['wind']['speed'],
-            'lat': w_data['coord']['lat'],
-            'lon': w_data['coord']['lon'],
-            'sensor_aqi': a_data['data']['aqi'] if a_data['status'] == 'ok' else None
-        }
-    except Exception as e:
-        st.sidebar.error(f"Data Fetch Error: {str(e)}")
-        return None
+        # Weather
+        w_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+        w_res = requests.get(w_url).json()
+        t, h, w = w_res['main']['temp'], w_res['main']['humidity'], w_res['wind']['speed']*3.6
+        # Hardware Sensor
+        s_url = f"https://api.waqi.info/feed/{city}/?token={WAQI_API_KEY}"
+        s_res = requests.get(s_url).json()
+        real_aqi = s_res['data']['aqi'] if s_res['status'] == 'ok' else None
+        pm25 = s_res['data']['iaqi'].get('pm25', {}).get('v', 'N/A')
+        pm10 = s_res['data']['iaqi'].get('pm10', {}).get('v', 'N/A')
+        return t, h, w, real_aqi, pm25, pm10
+    except: return 30, 50, 10, None, "N/A", "N/A"
 
 # =================================================================
-# 3. INTERACTIVE DASHBOARD LOGIC
+# 3. MAIN UI
 # =================================================================
-st.title("🌍 Hybrid Atmospheric Intelligence Platform")
-st.markdown("---")
+st.title("🌍 Hybrid AQI Platform")
+st.write("Validating **Machine Learning Predictions** against **Real-Time Hardware Sensors**.")
+st.divider()
 
-# Sidebar Configuration
-st.sidebar.header("📡 System Configuration")
-selected_city = st.sidebar.selectbox("Target Geographical Node", ["Surat", "Mumbai", "Delhi", "Bangalore", "Ahmedabad"])
-traffic_idx = st.sidebar.select_slider("Traffic Density (Heuristic)", options=range(0, 11), value=5)
-ind_idx = st.sidebar.select_slider("Industrial Output (Heuristic)", options=range(0, 11), value=3)
+if 'active' not in st.session_state: st.session_state.active = False
 
-if st.button("🚀 Initialize Hybrid Validation Protocol"):
-    with st.spinner("Synchronizing Software Model with Real-Time Sensor Grid..."):
-        env_data = fetch_environmental_data(selected_city)
+city_input = st.selectbox("Select your city to analyze real-time air quality:", list(CITY_COORDS.keys()))
+
+if st.button("Initialize Hybrid Scan"):
+    t, h, w, real, p25, p10 = get_data = get_live_data(city_input)
+    model = load_model()
+    
+    # Heuristics
+    hr = datetime.now().hour
+    traffic = 8.5 if (8<=hr<=10 or 17<=hr<=20) else 4.0
+    industry = 80.0 if city_input in ["Vapi", "Delhi", "Ankleshwar"] else 35.0
+    stagnation = industry / (w + 0.1)
+    
+    # Prediction
+    feats = pd.DataFrame([[t, h, w, traffic, industry, stagnation]], 
+                         columns=['temperature', 'humidity', 'wind_speed', 'traffic_density', 'industrial_activity', 'stagnation_index'])
+    pred = model.predict(feats)[0]
+    
+    st.session_state.results = {'city': city_input, 'pred': pred, 'real': real, 'p25': p25, 'p10': p10, 'stagnation': stagnation}
+    st.session_state.active = True
+
+# =================================================================
+# 4. DASHBOARD RENDERING (MATCHING SCREENSHOTS)
+# =================================================================
+if st.session_state.active:
+    res = st.session_state.results
+    
+    st.subheader("⚖️ System Validation (Model vs. Reality)")
+    c1, c2, c3 = st.columns(3)
+    
+    with c1:
+        st.info("### Software (XGBoost)\nCalculated via meteorological estimation.")
+        st.metric("Predicted AQI", f"{res['pred']:.0f}")
         
-        if env_data:
-            # ML Prediction Pipeline
-            model = load_prediction_model()
-            input_features = pd.DataFrame([[
-                env_data['temp'], env_data['humidity'], env_data['wind_speed'], traffic_idx, ind_idx
-            ]], columns=['temperature', 'humidity', 'wind_speed', 'traffic_density', 'industrial_activity'])
-            
-            ml_prediction = model.predict(input_features)[0]
-
-            # Section 1: Comparative Analytics
-            st.subheader("📊 Comparative AQI Metrics")
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("Local Temperature", f"{env_data['temp']}°C")
-            m2.metric("Relative Humidity", f"{env_data['humidity']}%")
-            m3.metric("XGBoost Prediction", f"{ml_prediction:.1f} AQI")
-            m4.metric("Hardware Sensor", f"{env_data['sensor_aqi'] if env_data['sensor_aqi'] else 'Offline'} AQI")
-
-            # Section 2: Geospatial & Temporal Analysis
-            st.markdown("---")
-            left_col, right_col = st.columns([2, 1])
-            
-            with left_col:
-                st.write("**📍 Localization & Impact Radius**")
-                map_obj = folium.Map(location=[env_data['lat'], env_data['lon']], zoom_start=12, tiles="cartodbpositron")
-                folium.Circle(
-                    location=[env_data['lat'], env_data['lon']],
-                    radius=3500,
-                    color='#e63946',
-                    fill=True,
-                    fill_opacity=0.2,
-                    tooltip="Predicted High-Impact Zone"
-                ).add_to(map_obj)
-                st_folium(map_obj, width=750, height=400, key="deployment_map")
-            
-            with right_col:
-                st.write("**📈 Simulated 24H Forecast Trend**")
-                # Generate a realistic synthetic trend based on the prediction
-                trend_points = ml_prediction + (np.sin(np.linspace(0, 2*np.pi, 24)) * 12)
-                chart_df = pd.DataFrame(trend_points, columns=['Forecasted AQI'])
-                st.area_chart(chart_df, color="#e63946")
-
-            # Section 3: Health Intelligence Report
-            st.divider()
-            health_status = "Critical" if ml_prediction > 150 else "Moderate" if ml_prediction > 50 else "Safe"
-            cig_equivalent = ml_prediction / 22
-            
-            st.error(f"### Environment Status: {health_status} | Predictive Confidence: High")
-            st.info(f"🚬 **Respiratory Impact:** Exposure today is equivalent to smoking **{cig_equivalent:.1f} cigarettes**.")
-            
-            advice_tab1, advice_tab2 = st.tabs(["🛡️ Protective Measures", "🔬 Scientific Methodology"])
-            with advice_tab1:
-                st.write("- **Outdoors:** Limit high-intensity aerobic activity during peak sunlight.")
-                st.write("- **Indoor:** Ensure HEPA filtration is active in residential zones.")
-            with advice_tab2:
-                st.write("This platform utilizes a **Hybrid Validation** approach, cross-referencing XGBoost gradient boosting predictions with live hardware telemetry for improved decision support.")
-
+    with c2:
+        st.success("### Hardware (WAQI)\nPulled from physical city sensors.")
+        if res['real']:
+            diff = abs(res['real'] - res['pred'])
+            st.metric("Ground Truth AQI", f"{res['real']}", delta=f"{diff:.0f} point variance", delta_color="inverse")
         else:
-            st.warning("⚠️ Data Stream Interrupted: Check API connectivity or verify secrets in the Streamlit Cloud Dashboard.")
+            st.metric("Ground Truth AQI", "Offline")
+            
+    with c3:
+        st.warning("### Pollutant Breakdown\nPhysical Particulate Matter.")
+        st.write(f"**PM 2.5:** {res['p25']} µg/m³")
+        st.write(f"**PM 10:** {res['p10']} µg/m³")
 
-st.markdown("---")
-st.caption("Hybrid Atmospheric Intelligence Platform | Research & Development Node")
+    st.divider()
+    
+    # SECTION 2: MAP & FORECAST
+    st.subheader("📊 Geospatial & Temporal Analysis")
+    l_col, r_col = st.columns(2)
+    
+    with l_col:
+        st.markdown("**Live Geospatial Heatmap**")
+        m = folium.Map(location=CITY_COORDS[res['city']], zoom_start=11, tiles="CartoDB positron")
+        folium.CircleMarker(CITY_COORDS[res['city']], radius=40, color="#FF8C00", fill=True, 
+                            tooltip=f"{res['city']} AQI: {res['real'] if res['real'] else res['pred']}").add_to(m)
+        st_folium(m, width=600, height=350, key=f"map_{res['city']}")
+        
+    with r_col:
+        st.markdown("**Simulated 24-Hour Forecast**")
+        chart_data = pd.DataFrame(res['pred'] + np.sin(np.linspace(0, 2*np.pi, 24))*15, columns=['AQI'])
+        st.line_chart(chart_data, color="#FF4B4B")
+
+    st.divider()
+    
+    # SECTION 3: IMPACT
+    st.subheader("🚨 Real-World Impact")
+    status = "Unhealthy" if res['pred'] > 150 else "Moderate"
+    st.error(f"### Predicted AQI: {res['pred']:.0f} ({status})")
+    
+    cigs = res['pred'] / 22
+    st.info(f"🚬 **Breathing this air today is equivalent to smoking {cigs:.1f} cigarettes.**")
+    
+    st.subheader("📋 Actionable Advice for Today")
+    t1, t2, t3 = st.tabs(["🏃 For Athletes", "👶 For Parents", "🚗 For Commuters"])
+    with t1: st.write("**Verdict:** Move it indoors. Heavy breathing increases intake by 10x.")
+    with t2: st.write("**Verdict:** Keep children inside during peak industrial hours.")
+    with t3: st.write("**Verdict:** Normal commute, but keep windows closed in industrial zones.")
+
+    st.divider()
+    st.subheader("💡 Why is this happening?")
+    if res['stagnation'] > 5:
+        st.markdown(f"The **Stagnation Index** in {res['city']} is currently very high. This means industrial emissions are not being blown away by the wind. Consider using public transit today.")
