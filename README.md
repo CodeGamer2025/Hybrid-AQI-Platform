@@ -1,6 +1,8 @@
 # 🌍 Hybrid Atmospheric Intelligence Platform
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://your-app-link-goes-here.streamlit.app/)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://hybrid-aqi-platform-gx6tuakjbdbcfqk3b9bjff.streamlit.app/)
+
+**Live Demo:** [Click here to view the live dashboard](https://hybrid-aqi-platform-gx6tuakjbdbcfqk3b9bjff.streamlit.app/)
 
 An advanced, real-time Air Quality Index (AQI) prediction and monitoring dashboard. This project validates Machine Learning estimations against real-world hardware sensors to provide accurate environmental and public health intelligence.
 
