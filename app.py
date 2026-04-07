@@ -109,6 +109,8 @@ if st.button("Initialize Hybrid Scan"):
 # =================================================================
 if st.session_state.active:
     res = st.session_state.results
+    
+    # SECTION 1: VALIDATION METRICS
     st.subheader("⚖️ System Validation (Model vs. Reality)")
     c1, c2, c3 = st.columns(3)
     
@@ -128,7 +130,7 @@ if st.session_state.active:
 
     st.divider()
     
-    # MAP & FORECAST
+    # SECTION 2: MAP & FORECAST
     st.subheader("📊 Geospatial & Temporal Analysis")
     l_col, r_col = st.columns(2)
     
@@ -146,20 +148,30 @@ if st.session_state.active:
 
     st.divider()
     
-    # IMPACT & ADVICE
+    # SECTION 3: IMPACT & ADVICE
     st.subheader("🚨 Real-World Impact")
     status = "Unhealthy" if res['pred'] > 150 else "Moderate"
     cigs = res['pred'] / 22
     st.error(f"### Predicted AQI: {res['pred']:.0f} ({status})")
     st.info(f"🚬 **Exposure is equivalent to smoking {cigs:.1f} cigarettes today.**")
     
-    t1, t2 = st.tabs(["🏃 Activity Advice", "🏠 General Safety"])
-    with t1: st.write("Move high-intensity workouts indoors. Heavy breathing increases pollutant intake significantly.")
-    with t2: st.write("Keep windows closed during peak industrial hours. Use air purifiers if available in the area.")
+    # THE RESTORED & UPGRADED TABS
+    st.subheader("📋 Actionable Advice for Today")
+    t1, t2, t3 = st.tabs(["🏃 For Athletes", "👶 For Parents", "🚗 For Commuters"])
+    
+    with t1: 
+        st.write("**Verdict:** Move high-intensity training indoors.")
+        st.caption("Deep aerobic breathing bypasses nasal filtration and increases particulate intake by up to 10x.")
+    with t2: 
+        st.write("**Verdict:** Limit outdoor playtime during peak industrial and traffic hours.")
+        st.caption("Children's respiratory systems are still developing, making them highly susceptible to PM2.5 exposure.")
+    with t3: 
+        st.write("**Verdict:** Keep vehicle windows closed and set AC to 'recirculate'.")
+        st.caption("Cabin air filters capture a significant portion of roadside emissions when external air intake is blocked.")
 
     st.divider()
     
-    # ENVIRONMENTAL CONTEXT (STAGNATION LOGIC)
+    # SECTION 4: ENVIRONMENTAL CONTEXT (STAGNATION LOGIC)
     st.subheader("💡 Environmental Context: Why is this happening?")
     if res['stagnation'] > 5:
         st.warning(f"**High Stagnation Alert:** The Stagnation Index in **{res['city']}** is currently elevated ({res['stagnation']:.1f}). This occurs when high industrial output meets low wind speeds, preventing emissions from blowing away. Consider using public transit today to reduce further buildup.")
