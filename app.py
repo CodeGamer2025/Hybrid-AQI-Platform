@@ -65,9 +65,12 @@ def get_live_data(city):
         w_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
         w_res = requests.get(w_url).json()
         t, h, w = w_res['main']['temp'], w_res['main']['humidity'], w_res['wind']['speed']*3.6
+        
         s_url = f"https://api.waqi.info/feed/{city}/?token={WAQI_API_KEY}"
         s_res = requests.get(s_url).json()
         real_aqi = s_res['data']['aqi'] if s_res['status'] == 'ok' else None
+        
+        # Pulling IAQI scores (Index values, not raw mass)
         pm25 = s_res['data']['iaqi'].get('pm25', {}).get('v', 'N/A')
         pm10 = s_res['data']['iaqi'].get('pm10', {}).get('v', 'N/A')
         return t, h, w, real_aqi, pm25, pm10
@@ -88,10 +91,11 @@ if st.button("Initialize Hybrid Scan"):
     t, h, w, real, p25, p10 = get_live_data(city_input)
     model = load_model()
     
+    # Advanced Heuristics
     hr = datetime.now().hour
     traffic = 8.5 if (8<=hr<=10 or 17<=hr<=20) else 4.0
     industry = 80.0 if city_input in ["Vapi", "Delhi"] else 35.0
-    stagnation = industry / (w + 0.1)
+    stagnation = industry / (w + 0.1) # Prevents division by zero
     
     feats = pd.DataFrame([[t, h, w, traffic, industry, stagnation]], 
                          columns=['temperature', 'humidity', 'wind_speed', 'traffic_density', 'industrial_activity', 'stagnation_index'])
@@ -123,20 +127,26 @@ if st.session_state.active:
         st.write(f"**PM 10 Index:** {res['p10']}")
 
     st.divider()
+    
+    # MAP & FORECAST
     st.subheader("📊 Geospatial & Temporal Analysis")
     l_col, r_col = st.columns(2)
     
     with l_col:
         st.markdown("**Live Geospatial Heatmap**")
         m = folium.Map(location=CITY_COORDS[res['city']], zoom_start=11, tiles="CartoDB positron")
-        folium.CircleMarker(CITY_COORDS[res['city']], radius=40, color="#FF8C00", fill=True).add_to(m)
+        # Fixed Circle size for consistent zooming
+        folium.Circle(CITY_COORDS[res['city']], radius=8000, color="#FF8C00", fill=True).add_to(m)
         st_folium(m, width=600, height=350, key=f"map_{res['city']}")
+        
     with r_col:
         st.markdown("**Simulated 24-Hour Forecast**")
         chart_data = pd.DataFrame(res['pred'] + np.sin(np.linspace(0, 2*np.pi, 24))*15, columns=['AQI'])
         st.line_chart(chart_data, color="#FF4B4B")
 
     st.divider()
+    
+    # IMPACT & ADVICE
     st.subheader("🚨 Real-World Impact")
     status = "Unhealthy" if res['pred'] > 150 else "Moderate"
     cigs = res['pred'] / 22
@@ -146,6 +156,15 @@ if st.session_state.active:
     t1, t2 = st.tabs(["🏃 Activity Advice", "🏠 General Safety"])
     with t1: st.write("Move high-intensity workouts indoors. Heavy breathing increases pollutant intake significantly.")
     with t2: st.write("Keep windows closed during peak industrial hours. Use air purifiers if available in the area.")
+
+    st.divider()
+    
+    # ENVIRONMENTAL CONTEXT (STAGNATION LOGIC)
+    st.subheader("💡 Environmental Context: Why is this happening?")
+    if res['stagnation'] > 5:
+        st.warning(f"**High Stagnation Alert:** The Stagnation Index in **{res['city']}** is currently elevated ({res['stagnation']:.1f}). This occurs when high industrial output meets low wind speeds, preventing emissions from blowing away. Consider using public transit today to reduce further buildup.")
+    else:
+        st.success(f"**Favorable Dispersion:** The Stagnation Index in **{res['city']}** is currently low ({res['stagnation']:.1f}). Current wind speeds are doing a good job of clearing industrial and traffic emissions out of the local atmosphere.")
 
 st.markdown("---")
 st.caption("Hybrid Atmospheric Intelligence Platform | Research Node")
