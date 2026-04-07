@@ -118,8 +118,9 @@ if st.session_state.active:
             st.metric("Ground Truth AQI", f"{res['real']}", delta=f"{diff:.0f} point variance", delta_color="inverse")
         else: st.metric("Ground Truth AQI", "Offline")
     with c3:
-        st.warning("### Pollutant Breakdown\nPhysical Particulate Matter.")
-        st.write(f"**PM 2.5:** {res['p25']} µg/m³ | **PM 10:** {res['p10']} µg/m³")
+        st.warning("### Pollutant Breakdown\nIndividual Air Quality Index (IAQI).")
+        st.write(f"**PM 2.5 Index:** {res['p25']}")
+        st.write(f"**PM 10 Index:** {res['p10']}")
 
     st.divider()
     st.subheader("📊 Geospatial & Temporal Analysis")
